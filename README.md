@@ -44,7 +44,7 @@ The COVID-19 Israel team published a dataset on international statistics relatin
 
 
 ### Face Mask Policies
-To fill in the gaps of public data on both (1) enacted face mask policies in response to the COVID-19 outbreak as well as (2) the general social norms of wearing face masks, our team has crowdsourced this data via Twitter. If you would like to contribute to the public knowledge of face mask norms and policies in your region, please visit the [spreadsheet].(https://docs.google.com/spreadsheets/d/1dG3CaE9u180aDQri8haCllggJxWB-pdyEIZGUnsX-Dc/edit)
+To fill in the gaps of public data on both (1) enacted face mask policies in response to the COVID-19 outbreak as well as (2) the general social norms of wearing face masks, our team has crowdsourced this data via Twitter. If you would like to contribute to the public knowledge of face mask norms and policies in your region, please visit the [spreadsheet](https://docs.google.com/spreadsheets/d/1dG3CaE9u180aDQri8haCllggJxWB-pdyEIZGUnsX-Dc/edit).
 
 Contact Us
 ----------
