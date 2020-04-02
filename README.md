@@ -49,20 +49,20 @@ To fill in the gaps of public data on both (1) enacted face mask policies in res
 Contact Us
 ----------
 For any questions, comments, or suggestions please reach out to:
-Emily Crawford (emily.crawford@yale.edu).
+Emily Crawford (emily.crawford [AT] yale [DOT] edu).
 
 People
 ------
 
 Jason Abaluck
 
-    email:       jason.abaluck@yale.edu
+    email:       jason.abaluck [AT] yale [DOT] edu
     institution: Yale School of Management
     role:        Author
 
 Emily L. Crawford
 
-    email:       emily.crawford@yale.edu
+    email:       emily.crawford [AT] yale [DOT] edu
     institution: Yale School of Management
     role:        Project Manager
 
