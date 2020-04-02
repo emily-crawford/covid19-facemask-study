@@ -1,0 +1,1339 @@
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  D:\Dropbox (yale som economics)\COVID-19 Masks\Logfiles\makedata2Apr2020_confirmedcases.log
+  log type:  text
+ opened on:   2 Apr 2020, 11:58:12
+
+. clear;
+
+. **Load Oxford data and update date format;
+. insheet using "`datadir'\OxCGRT_Download_latest_data.csv";
+(35 vars, 9,283 obs)
+
+. rename countryname country;
+
+. tostring date, usedisplayformat replace;
+date was long now str8
+
+. gen newdate = date(date,"YMD");
+
+. tempfile oxdata;
+
+. save `oxdata', replace;
+(note: file C:\Users\jabal\AppData\Local\Temp\ST_4864_000002.tmp not found)
+file C:\Users\jabal\AppData\Local\Temp\ST_4864_000002.tmp saved
+
+. *Load infection rate and death data;
+. clear;
+
+. insheet using "`datadir'\Reports.csv";
+(47 vars, 64,986 obs)
+
+. /*;
+> **When not commented out, create a list of countries and states in the data;
+> 
+> *Create country and (country, state) csvs;
+> preserve;
+> keep country state;
+> sort country state;
+> gen hascomma = strpos(state,",");
+> drop if hascomma != 0;
+> drop hascomma;
+> drop if state == "";
+> duplicates drop;
+> outsheet using "`datadir'\allcountrystates.csv", comma replace;
+> restore;
+> 
+> preserve;
+> keep country;
+> sort country;
+> duplicates drop;
+> outsheet using "`datadir'\allcountries.csv", comma replace;
+> restore;
+> */;
+. **Rename countries so that they merge with mask data;
+. replace country = "United States of America" if country == "United States";
+(33,782 real changes made)
+
+. replace country = "Russia" if strpos(country,"Russia");
+(62 real changes made)
+
+. replace country = "Iran" if strpos(country,"Iran");
+(43 real changes made)
+
+. replace country = "South Korea" if country == "Korea, Republic of";
+(164 real changes made)
+
+. replace country = "Taiwan" if strpos(country,"Taiwan");
+(71 real changes made)
+
+. *Merge in mask data and keep only countries with non-missing data;
+. preserve;
+
+. clear;
+
+. insheet using "`datadir'\graph_mask_requirements_v3B.csv";
+(4 vars, 55 obs)
+
+. tempfile maskdata;
+
+. save `maskdata', replace;
+(note: file C:\Users\jabal\AppData\Local\Temp\ST_4864_000004.tmp not found)
+file C:\Users\jabal\AppData\Local\Temp\ST_4864_000004.tmp saved
+
+. restore;
+
+. merge m:1 country using `maskdata';
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                         5,957
+        from master                     5,957  (_merge==1)
+        from using                          0  (_merge==2)
+
+    matched                            59,029  (_merge==3)
+    -----------------------------------------
+
+. assert _merge != 2;
+
+. keep if mask_n != .;
+(6,851 observations deleted)
+
+. drop _merge;
+
+. *Update date information;
+. gen date = substr(update_time,1,10);
+
+. replace date = subinstr(date,"-","",.);
+(58,135 real changes made)
+
+. keep country state county city date population confirmed deaths negative pending total_hospitalized_patients mask_n db_source_name;
+
+. duplicates drop;
+
+Duplicates in terms of all variables
+
+(2,964 observations deleted)
+
+. *Drop dates with missing case and death information;
+. drop if confirmed == . | deaths == .;
+(16,935 observations deleted)
+
+. gen newdate = date(date,"YMD");
+
+. *Drop final date since data may be incomplete;
+. egen maxdate = max(newdate);
+
+. drop if newdate == maxdate;
+(17 observations deleted)
+
+. drop maxdate;
+
+. *For debugging;
+. *sort country date state county city;
+. *outsheet using sortedreports.csv, comma replace;
+. ********************************************************************************************************;
+. **SECTION 1: CLEAN DATA;
+. ********************************************************************************************************;
+. replace state = "NA" if state == "";
+(1,639 real changes made)
+
+. replace county = "NA" if county == "";
+(7,318 real changes made)
+
+. replace city = "NA" if city == "";
+(38,219 real changes made)
+
+. replace country = "French Polynesia" if state == "French Polynesia";
+(16 real changes made)
+
+. egen region = group(country state county city);
+
+. sort region newdate;
+
+. *Decide what sources to keep for each country;
+. rename db_source_name source;
+
+. egen eachcountrysource = tag(country newdate source);
+
+. bys country newdate: egen sumsource = sum(eachcountrysource);
+
+. tab sumsource;
+
+  sumsource |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          1 |      3,290        8.61        8.61
+          2 |     34,357       89.90       98.50
+          3 |        572        1.50      100.00
+------------+-----------------------------------
+      Total |     38,219      100.00
+
+. *If multiple records from the same source on the same date, keep only largest;
+. bys region source newdate: gen numrecords = _N;
+
+. bys region source newdate: egen maxconfirmed = max(confirmed);
+
+. keep if confirmed == maxconfirmed;
+(233 observations deleted)
+
+. bys region source newdate: egen maxdeaths = max(deaths);
+
+. keep if deaths == maxdeaths;
+(1 observation deleted)
+
+. bys region source newdate: gen numrecords2 = _N;
+
+. assert numrecords2 == 1;
+
+. drop numrecords maxconfirmed maxdeaths numrecords2;
+
+. *In the US, Johns Hopkins data is redundant on days with COVID Project data;
+. drop if source == "Johns Hopkins CSSE" & sumsource == 2 & country == "United States of America";
+(31,267 observations deleted)
+
+. *EU data is redundant with Johns Hopkins Data;
+. drop if source == "EU Data";
+(787 observations deleted)
+
+. *Covid-19 Israel is redundant with Johns Hopkins Data;
+. drop if source == "Covid-19 Israel";
+(24 observations deleted)
+
+. *Japan tracker is redundant with Johns Hopkins Data;
+. drop if source == "Japan COVID-19 Coronavirus Tracker";
+(49 observations deleted)
+
+. *COVID-19-SG is redundant with Johns Hopkins Data;
+. drop if source == "COVID-19-SG";
+(57 observations deleted)
+
+. *Korean data is redundant with Johns Hopkins Data;
+. drop if source == "Korean Data";
+(69 observations deleted)
+
+. *Deal with redundant "UK" observations in UK;
+. drop if state == "UK" & country == "United Kingdom";
+(1 observation deleted)
+
+. *Deal with "whole country" observations not labeled as "NA";
+. replace state = "NA" if state == country;
+(86 real changes made)
+
+. drop region;
+
+. egen region = group(country state county city);
+
+. bys region newdate: gen counter = _N;
+
+. tab counter;
+
+    counter |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          1 |      5,731      100.00      100.00
+------------+-----------------------------------
+      Total |      5,731      100.00
+
+. tab country if counter != 1;
+no observations
+
+. sort country newdate state source;
+
+. assert counter == 1;
+
+. /*;
+> *For debugging, check countries where one region is large, confirm we're not double-counting;
+> drop totinfect percinfect;
+> bys country newdate: egen totinfect = sum(confirmed);
+> gen percinfect = confirmed/totinfect;
+> list country state county city newdate percinfect confirmed totinfect if percinfect > 0.2 & percinfect != 1;
+> */;
+. **Impute missing dates with the last non-missing value
+> 
+> *Create a dataset with every region date;
+. preserve;
+
+. keep newdate;
+
+. duplicates drop;
+
+Duplicates in terms of all variables
+
+(5,661 observations deleted)
+
+. gen join = 1;
+
+. tempfile alldates;
+
+. save `alldates', replace;
+(note: file C:\Users\jabal\AppData\Local\Temp\ST_4864_000006.tmp not found)
+file C:\Users\jabal\AppData\Local\Temp\ST_4864_000006.tmp saved
+
+. restore;
+
+. preserve;
+
+. keep country region state county city;
+
+. duplicates drop;
+
+Duplicates in terms of all variables
+
+(5,370 observations deleted)
+
+. gen join = 1;
+
+. joinby join using `alldates';
+
+. tempfile allregiondates;
+
+. save `allregiondates', replace;
+(note: file C:\Users\jabal\AppData\Local\Temp\ST_4864_000008.tmp not found)
+file C:\Users\jabal\AppData\Local\Temp\ST_4864_000008.tmp saved
+
+. restore;
+
+. merge 1:1  region newdate using `allregiondates';
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                        19,539
+        from master                         0  (_merge==1)
+        from using                     19,539  (_merge==2)
+
+    matched                             5,731  (_merge==3)
+    -----------------------------------------
+
+. assert _merge == 3 | _merge == 2;
+
+. bys  region: egen mindate = min(newdate);
+
+. *All regions extend to the final date for that country;
+. bys  country: egen maxdate = max(newdate);
+
+. keep if newdate >= mindate & newdate <= maxdate;
+(0 observations deleted)
+
+. drop mindate maxdate;
+
+. sort region newdate;
+
+. by region: replace confirmed = confirmed[_n-1] if missing(confirmed);
+(5,771 real changes made)
+
+. by region: replace deaths = deaths[_n-1] if missing(deaths);
+(5,771 real changes made)
+
+. drop _merge;
+
+. *If no earlier nonmissing values, set to 0;
+. replace confirmed = 0 if confirmed == .;
+(13,768 real changes made)
+
+. replace deaths = 0 if deaths == .;
+(13,768 real changes made)
+
+. *If cumulative cases or deaths decline, replace all earlier larger values;
+. *For example, if cases are 10, 30, 58, 28, 55, 100, 120 -- we would update to: 10, 28, 28, 55, 100, 120 ;
+. gen confirmeddiff = confirmed-confirmed[_n-1] if region == region[_n-1];
+(361 missing values generated)
+
+. gen deathdiff = deaths-deaths[_n-1] if region == region[_n-1];
+(361 missing values generated)
+
+. gen flag = 1 if confirmeddiff < 0 | deathdiff < 0;
+(25,213 missing values generated)
+
+. bys region: egen maxflag = max(flag);
+(21910 missing values generated)
+
+. egen totflag = max(maxflag);
+
+. local totflag = totflag;
+
+. while(`totflag' > 0) {;
+  2. gen flagdate = newdate if flag == 1;
+  3. bys region: egen mindate = min(flagdate);
+  4. gen flagconfirm = confirmed if newdate == mindate;
+  5. bys region: egen maxflagconfirm = max(flagconfirm);
+  6. *list country region date confirmed flagconfirm newdate mindate if country == "Japan";
+. *assert 1 == 0;
+. replace confirmed = maxflagconfirm if confirmed > maxflagconfirm & newdate <= mindate;
+  7. gen flagdeaths = deaths if newdate == mindate;
+  8. bys region: egen maxflagdeaths = max(flagdeaths);
+  9. replace deaths = maxflagdeaths if deaths > maxflagdeaths & newdate <= mindate;
+ 10. replace flag = 0 if newdate == mindate;
+ 11. drop maxflag totflag flagdate flagconfirm flagdeaths mindate maxflagconfirm maxflagdeaths;
+ 12. bys region: egen maxflag = max(flag);
+ 13. egen totflag = sum(maxflag);
+ 14. local totflag = totflag;
+ 15. display "totflag is `totflag'";
+ 16. };
+(25,213 missing values generated)
+(21910 missing values generated)
+(25,222 missing values generated)
+(21910 missing values generated)
+(65 real changes made)
+(25,222 missing values generated)
+(21910 missing values generated)
+(13 real changes made)
+(48 real changes made)
+(21910 missing values generated)
+totflag is 490
+(25,261 missing values generated)
+(24780 missing values generated)
+(25,263 missing values generated)
+(24780 missing values generated)
+(7 real changes made)
+(25,263 missing values generated)
+(24780 missing values generated)
+(3 real changes made)
+(7 real changes made)
+(21910 missing values generated)
+totflag is 70
+(25,268 missing values generated)
+(25200 missing values generated)
+(25,269 missing values generated)
+(25200 missing values generated)
+(1 real change made)
+(25,269 missing values generated)
+(25200 missing values generated)
+(1 real change made)
+(1 real change made)
+(21910 missing values generated)
+totflag is 70
+(25,269 missing values generated)
+(25200 missing values generated)
+(25,269 missing values generated)
+(25200 missing values generated)
+(2 real changes made)
+(25,269 missing values generated)
+(25200 missing values generated)
+(0 real changes made)
+(1 real change made)
+(21910 missing values generated)
+totflag is 0
+
+. drop maxflag totflag;
+
+. *If "state" = "country", drop all other states to avoid double-counting;
+. gen statecountry = (state == country);
+
+. bys country newdate: egen maxstatecountry = max(statecountry);
+
+. drop if maxstatecountry == 1 & statecountry != 1;
+(0 observations deleted)
+
+. drop statecountry maxstatecountry;
+
+. *If "state" = "county", drop all other counties to avoid double-counting;
+. gen statecounty = (state == county);
+
+. replace statecounty = 1 if county == "";
+(0 real changes made)
+
+. replace statecounty = 1 if county == "NA";
+(15,330 real changes made)
+
+. bys country state newdate: egen maxstatecounty = max(statecounty);
+
+. drop if maxstatecounty == 1 & statecounty != 1;
+(7,140 observations deleted)
+
+. drop statecounty maxstatecounty;
+
+. *If "county" = "city", drop all other cities to avoid double-counting;
+. gen countycity = (county == city);
+
+. replace countycity = 1 if city == "";
+(0 real changes made)
+
+. replace countycity = 1 if city == "NA";
+(70 real changes made)
+
+. bys country state county newdate: egen maxcountycity = max(countycity);
+
+. drop if maxcountycity == 1 & countycity != 1;
+(0 observations deleted)
+
+. drop countycity maxcountycity;
+
+. ********************************************************************************************************;
+. **SECTION 2: Merge in Policy Data;
+. ********************************************************************************************************;
+. *Rename countries so that they merge with Oxford data;
+. replace country = "United States" if country == "United States of America";
+(6,300 real changes made)
+
+. replace country = "Czech Republic" if country == "Czechia";
+(70 real changes made)
+
+. merge m:1 country newdate using `oxdata';
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                         8,309
+        from master                     1,604  (_merge==1)
+        from using                      6,705  (_merge==2)
+
+    matched                            16,526  (_merge==3)
+    -----------------------------------------
+
+. tab _merge;
+
+                 _merge |      Freq.     Percent        Cum.
+------------------------+-----------------------------------
+        master only (1) |      1,604        6.46        6.46
+         using only (2) |      6,705       27.00       33.46
+            matched (3) |     16,526       66.54      100.00
+------------------------+-----------------------------------
+                  Total |     24,835      100.00
+
+. *Confirm that all mask wearing countries merge;
+. *Check countries which never merge in either direction;
+. bys country: egen maxmerge = max(_merge);
+
+. tab country if _merge == 1 & maxmerge != 3;
+no observations
+
+. tab country if _merge == 2 & maxmerge != 3;
+
+                              country |      Freq.     Percent        Cum.
+--------------------------------------+-----------------------------------
+                          Afghanistan |         78        1.33        1.33
+                              Albania |         17        0.29        1.62
+                              Algeria |         83        1.42        3.03
+                              Andorra |         14        0.24        3.27
+                               Angola |          6        0.10        3.38
+                  Antigua and Barbuda |          6        0.10        3.48
+                              Armenia |         77        1.31        4.79
+                           Azerbaijan |         81        1.38        6.17
+                              Bahamas |          9        0.15        6.33
+                              Bahrain |         85        1.45        7.77
+                           Bangladesh |         13        0.22        8.00
+                             Barbados |         86        1.47        9.46
+                              Belarus |         80        1.36       10.83
+                               Belize |         84        1.43       12.26
+                                Benin |          9        0.15       12.41
+                              Bermuda |         86        1.47       13.88
+                               Bhutan |         15        0.26       14.13
+                              Bolivia |         87        1.48       15.62
+               Bosnia and Herzegovina |         15        0.26       15.87
+                             Botswana |         85        1.45       17.32
+                               Brunei |         16        0.27       17.60
+                         Burkina Faso |         14        0.24       17.83
+                             Cambodia |         79        1.35       19.18
+                             Cameroon |         15        0.26       19.44
+                           Cape Verde |          4        0.07       19.51
+                       Cayman Islands |          6        0.10       19.61
+             Central African Republic |         10        0.17       19.78
+                                 Chad |          6        0.10       19.88
+                                Chile |         86        1.47       21.35
+                                Congo |         10        0.17       21.52
+                           Costa Rica |         86        1.47       22.98
+                        Cote d'Ivoire |         13        0.22       23.21
+                              Croatia |         87        1.48       24.69
+                                 Cuba |         13        0.22       24.91
+                               Cyprus |         16        0.27       25.18
+         Democratic Republic of Congo |         54        0.92       26.10
+                             Djibouti |          7        0.12       26.22
+                             Dominica |          2        0.03       26.26
+                   Dominican Republic |         85        1.45       27.71
+                              Ecuador |         85        1.45       29.16
+                          El Salvador |         85        1.45       30.61
+                    Equatorial Guinea |         11        0.19       30.79
+                              Eritrea |          3        0.05       30.84
+                              Estonia |         83        1.42       32.26
+                             Ethiopia |         12        0.20       32.46
+                       Faeroe Islands |          1        0.02       32.48
+                                 Fiji |          6        0.10       32.58
+                                Gabon |         13        0.22       32.80
+                               Gambia |          8        0.14       32.94
+                              Georgia |         84        1.43       34.37
+                                Ghana |         13        0.22       34.60
+                            Gibraltar |          1        0.02       34.61
+                            Greenland |          6        0.10       34.71
+                              Grenada |          2        0.03       34.75
+                                 Guam |          7        0.12       34.87
+                            Guatemala |         85        1.45       36.32
+                               Guinea |         12        0.20       36.52
+                               Guyana |         85        1.45       37.97
+                                Haiti |          6        0.10       38.07
+                             Honduras |         85        1.45       39.52
+                              Hungary |         87        1.48       41.01
+                              Iceland |         85        1.45       42.46
+                                 Iraq |         85        1.45       43.90
+                              Jamaica |         14        0.24       44.14
+                               Jordan |         85        1.45       45.59
+                           Kazakhstan |         11        0.19       45.78
+                                Kenya |         85        1.45       47.23
+                               Kuwait |         84        1.43       48.66
+                      Kyrgyz Republic |          7        0.12       48.78
+                                 Laos |         78        1.33       50.11
+                               Latvia |         20        0.34       50.45
+                              Lebanon |         84        1.43       51.88
+                              Liberia |          9        0.15       52.04
+                        Liechtenstein |         16        0.27       52.31
+                            Lithuania |         78        1.33       53.64
+                           Luxembourg |         82        1.40       55.04
+                                Macao |         84        1.43       56.47
+                            Macedonia |         80        1.36       57.83
+                           Madagascar |          4        0.07       57.90
+                             Maldives |         18        0.31       58.21
+                                Malta |         18        0.31       58.52
+                           Mauritania |         11        0.19       58.70
+                            Mauritius |          6        0.10       58.81
+                              Moldova |         17        0.29       59.10
+                               Monaco |         74        1.26       60.36
+                             Mongolia |         12        0.20       60.56
+                           Montenegro |          8        0.14       60.70
+                              Morocco |         18        0.31       61.01
+                           Mozambique |          2        0.03       61.04
+                              Myanmar |         79        1.35       62.39
+                              Namibia |         11        0.19       62.57
+                                Nepal |         74        1.26       63.84
+                        New Caledonia |          4        0.07       63.90
+                          New Zealand |         86        1.47       65.37
+                            Nicaragua |         85        1.45       66.82
+                                Niger |          4        0.07       66.89
+                              Nigeria |         84        1.43       68.32
+                               Norway |         85        1.45       69.77
+                                 Oman |         82        1.40       71.17
+                            Palestine |         20        0.34       71.51
+                               Panama |         85        1.45       72.96
+                     Papua New Guinea |          4        0.07       73.03
+                             Paraguay |         17        0.29       73.32
+                                 Peru |         19        0.32       73.64
+                          Philippines |         82        1.40       75.04
+                               Poland |         85        1.45       76.49
+                             Portugal |         85        1.45       77.94
+                                Qatar |         86        1.47       79.40
+                               Rwanda |         11        0.19       79.59
+                          Saint Lucia |         11        0.19       79.78
+     Saint Vincent and the Grenadines |          2        0.03       79.81
+                           San Marino |         85        1.45       81.26
+                              Senegal |         18        0.31       81.57
+                               Serbia |         87        1.48       83.05
+                           Seychelles |         11        0.19       83.24
+                      Slovak Republic |         85        1.45       84.69
+                             Slovenia |         85        1.45       86.14
+                              Somalia |          9        0.15       86.29
+                            Sri Lanka |         87        1.48       87.77
+                                Sudan |         12        0.20       87.98
+                             Suriname |          6        0.10       88.08
+                            Swaziland |         11        0.19       88.27
+                                Syria |         85        1.45       89.72
+                             Tanzania |         86        1.47       91.18
+                                Timor |          3        0.05       91.24
+                                 Togo |         13        0.22       91.46
+                  Trinidad and Tobago |         13        0.22       91.68
+                              Tunisia |         18        0.31       91.99
+                               Uganda |         85        1.45       93.44
+                              Ukraine |         14        0.24       93.67
+                 United Arab Emirates |         85        1.45       95.12
+         United States Virgin Islands |          1        0.02       95.14
+                              Uruguay |         11        0.19       95.33
+                           Uzbekistan |         10        0.17       95.50
+                            Venezuela |         87        1.48       96.98
+                              Vietnam |         85        1.45       98.43
+                               Zambia |          7        0.12       98.55
+                             Zimbabwe |         85        1.45      100.00
+--------------------------------------+-----------------------------------
+                                Total |      5,865      100.00
+
+. bys country: egen maskmax = max(mask_n);
+(5865 missing values generated)
+
+. assert maxmerge == 3 if maskmax == 1;
+
+. drop maxmerge maskmax;
+
+. drop if _merge == 2;
+(6,705 observations deleted)
+
+. rename _merge origmerge;
+
+. drop confirmedcases confirmeddeaths;
+
+. rename confirmed confirmedcases;
+
+. rename deaths confirmeddeaths;
+
+. rename date origdate;
+
+. rename newdate date;
+
+. ********************************************************************************************************;
+. **SECTION 3: Create regression variables;
+. ********************************************************************************************************;
+. if("`outcome'" == "confirmedcases") {;
+. local start = "pos100";
+. };
+
+. if("`outcome'" == "confirmeddeaths") {;
+. local start = "death10";
+. };
+
+. local geog = "country";
+
+. *keep if county == state | state == "";
+. preserve;
+
+. gen regcount = 1;
+
+. collapse (sum) confirmedcases confirmeddeaths regcount, by(`geog' date);
+
+. *Find a date with at least 100 infections;
+. gen pos100 = (confirmedcases >= 100) & confirmedcases != .;
+
+. *Find date with at least 10 deaths;
+. gen death10 = (confirmeddeaths >= 10) & confirmeddeaths != .;
+
+. *gen ln`outcome' = ln(`outcome');
+. *list `geog' date `outcome' ln`outcome' pos100 regcount if country == "Brazil", clean;
+. *assert 1 == 0;
+. keep `geog' date `start' `outcome';
+
+. keep if `start' > 0;
+(2,009 observations deleted)
+
+. rename `outcome' init;
+
+. bys `geog': egen mindate = min(date);
+
+. keep if date == mindate;
+(959 observations deleted)
+
+. keep `geog' mindate init;
+
+. duplicates drop;
+
+Duplicates in terms of all variables
+
+(0 observations are duplicates)
+
+. tempfile mindate;
+
+. save `mindate', replace;
+(note: file C:\Users\jabal\AppData\Local\Temp\ST_4864_00000a.tmp not found)
+file C:\Users\jabal\AppData\Local\Temp\ST_4864_00000a.tmp saved
+
+. restore;
+
+. capture drop mindate;
+
+. merge m:1 `geog' using `mindate';
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                            70
+        from master                        70  (_merge==1)
+        from using                          0  (_merge==2)
+
+    matched                            18,060  (_merge==3)
+    -----------------------------------------
+
+. assert _merge == 3 | _merge == 1;
+
+. drop _merge;
+
+. tab mindate;
+
+    mindate |      Freq.     Percent        Cum.
+------------+-----------------------------------
+      21936 |      2,310       12.79       12.79
+      21965 |         70        0.39       13.18
+      21966 |         70        0.39       13.57
+      21968 |      1,540        8.53       22.09
+      21971 |         70        0.39       22.48
+      21974 |        770        4.26       26.74
+      21975 |         70        0.39       27.13
+      21976 |      7,840       43.41       70.54
+      21979 |        770        4.26       74.81
+      21980 |        420        2.33       77.13
+      21982 |        140        0.78       77.91
+      21983 |      1,470        8.14       86.05
+      21984 |        980        5.43       91.47
+      21985 |        280        1.55       93.02
+      21987 |         70        0.39       93.41
+      21988 |        420        2.33       95.74
+      21989 |        140        0.78       96.51
+      21990 |         70        0.39       96.90
+      21991 |         70        0.39       97.29
+      21992 |        140        0.78       98.06
+      21993 |        210        1.16       99.22
+      21994 |        140        0.78      100.00
+------------+-----------------------------------
+      Total |     18,060      100.00
+
+. gen twoweeks = mindate+14;
+(70 missing values generated)
+
+. gen onemonth = mindate+28;
+(70 missing values generated)
+
+. gen days10 = mindate+10;
+(70 missing values generated)
+
+. *Create regression variables;
+. preserve;
+
+. keep if date == mindate;
+(17,872 observations deleted)
+
+. keep `geog' mindate s1_s-s11_in;
+
+. duplicates drop;
+
+Duplicates in terms of all variables
+
+(216 observations deleted)
+
+. bys `geog': gen counter = _N;
+
+. list if counter > 1;
+
+. assert counter == 1;
+
+. local regvar = "s1_schoolclosing s2_workplace s3_cancel s4_closepublic s5_publicinfo s6_restriction s7_international s8_fiscal s9_monet s10_emerg s11_invest";
+
+. foreach x of local regvar {;
+  2. rename `x' init_`x';
+  3. gen blank_`x' = (init_`x' == .);
+  4. replace init_`x' = 0 if init_`x' == .;
+  5. };
+(6 real changes made)
+(8 real changes made)
+(8 real changes made)
+(7 real changes made)
+(10 real changes made)
+(8 real changes made)
+(9 real changes made)
+(19 real changes made)
+(19 real changes made)
+(21 real changes made)
+(22 real changes made)
+
+. keep `geog' init_* blank_*;
+
+. tempfile initvars;
+
+. save `initvars', replace;
+(note: file C:\Users\jabal\AppData\Local\Temp\ST_4864_00000c.tmp not found)
+file C:\Users\jabal\AppData\Local\Temp\ST_4864_00000c.tmp saved
+
+. restore;
+
+. preserve;
+
+. gen enddate = mindate + 7;
+(70 missing values generated)
+
+. keep if date >= mindate & date <= enddate;
+(16,066 observations deleted)
+
+. keep `geog' date s1_s-s11_in;
+
+. duplicates drop;
+
+Duplicates in terms of all variables
+
+(1,728 observations deleted)
+
+. bys `geog': gen counter = _N;
+
+. assert counter <= 8;
+
+. local regvar = "s1_schoolclosing s2_workplace s3_cancel s4_closepublic s5_publicinfo s6_restriction s7_international s8_fiscal s9_monet s10_emerg s11_invest";
+
+. gen avgcount = 1;
+
+. collapse (mean) `regvar' (sum) avgcount, by(`geog');
+
+. foreach x of local regvar {;
+  2. rename `x' avg_var_`x';
+  3. gen avg_blank_`x' = (avg_var_`x' == .);
+  4. replace avg_var_`x' = 0 if avg_var_`x' == .;
+  5. };
+(6 real changes made)
+(7 real changes made)
+(7 real changes made)
+(7 real changes made)
+(9 real changes made)
+(8 real changes made)
+(8 real changes made)
+(13 real changes made)
+(18 real changes made)
+(18 real changes made)
+(22 real changes made)
+
+. keep `geog' avg_* avgcount;
+
+. tempfile avgvars;
+
+. save `avgvars', replace;
+(note: file C:\Users\jabal\AppData\Local\Temp\ST_4864_00000e.tmp not found)
+file C:\Users\jabal\AppData\Local\Temp\ST_4864_00000e.tmp saved
+
+. restore;
+
+. gen time = date-mindate;
+(70 missing values generated)
+
+. keep if time >= 0 & time != .;
+(9,466 observations deleted)
+
+. *Populate missing mask values;
+. bys country: egen maskmax = max(mask_n);
+
+. replace mask_n = maskmax if mask_n == .;
+(3,703 real changes made)
+
+. *Is mask data consistent within every country?;
+. gen masktest = mask_n;
+
+. replace masktest = 2 if masktest == .;
+(0 real changes made)
+
+. bys country: egen sdmask = sd(masktest);
+
+. by country: gen countdate = _N;
+
+. assert sdmask == 0 | countdate == 1;
+
+. drop masktest sdmask countdate;
+
+. sort country time;
+
+. tab country if mask_n != .;
+
+                              country |      Freq.     Percent        Cum.
+--------------------------------------+-----------------------------------
+                            Argentina |         12        0.14        0.14
+                            Australia |        242        2.79        2.93
+                              Austria |         48        0.55        3.49
+                              Belgium |         26        0.30        3.79
+                               Brazil |         19        0.22        4.01
+                             Bulgaria |         12        0.14        4.14
+                               Canada |        460        5.31        9.45
+                                China |      2,310       26.66       36.11
+                             Colombia |         13        0.15       36.27
+                       Czech Republic |         18        0.21       36.47
+                              Denmark |         66        0.76       37.23
+                                Egypt |         18        0.21       37.44
+                              Finland |         21        0.24       37.68
+                               France |        320        3.69       41.38
+                              Germany |         31        0.36       41.74
+                               Greece |         21        0.24       41.98
+                            Hong Kong |         30        0.35       42.32
+                                India |         18        0.21       42.53
+                            Indonesia |         17        0.20       42.73
+                                 Iran |         35        0.40       43.13
+                              Ireland |         18        0.21       43.34
+                               Israel |         42        0.48       43.83
+                                Italy |        836        9.65       53.47
+                                Japan |         40        0.46       53.94
+                             Malaysia |         23        0.27       54.20
+                               Mexico |         13        0.15       54.35
+                          Netherlands |        104        1.20       55.55
+                             Pakistan |         16        0.18       55.74
+                              Romania |         18        0.21       55.94
+                               Russia |         15        0.17       56.12
+                         Saudi Arabia |         18        0.21       56.33
+                            Singapore |         32        0.37       56.69
+                         South Africa |         14        0.16       56.86
+                          South Korea |         41        0.47       57.33
+                                Spain |        630        7.27       64.60
+                               Sweden |         26        0.30       64.90
+                          Switzerland |         27        0.31       65.21
+                               Taiwan |         14        0.16       65.37
+                             Thailand |         17        0.20       65.57
+                               Turkey |         13        0.15       65.72
+                       United Kingdom |        270        3.12       68.84
+                        United States |      2,700       31.16      100.00
+--------------------------------------+-----------------------------------
+                                Total |      8,664      100.00
+
+. tab mask_n;
+
+mask_norm_s |
+        ick |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |      6,229       71.90       71.90
+          1 |      2,435       28.10      100.00
+------------+-----------------------------------
+      Total |      8,664      100.00
+
+. ********************************************************************************************************;
+. **SECTION 4: Create graph;
+. ********************************************************************************************************;
+. if(`makegraph' == 1) {;
+. collapse (sum) `outcome' population (mean) mask_n, by(`geog' time);
+. gen ln`outcome' = ln(`outcome');
+. drop ln`outcome';
+. replace country = "USA" if strpos(country,"United States");
+. bys `geog': egen maxpop = max(population);
+. *Replace population for missing countries w/ > 5 million;
+. tab country if maxpop == 0;
+. *Replace population for missing countries w/ > 5 million;
+. replace maxpop = 7392000 if country == "Hong Kong";
+. replace maxpop = 5603000 if country == "Denmark";
+. replace maxpop = 17180000 if country == "Netherlands";
+. replace maxpop = 66990000 if country == "France";
+. replace maxpop = 66440000 if country == "United Kingdom";
+. assert maxpop != .;
+. *Max population is total population of all infected regions;
+. keep if maxpop > 5e6;
+. *keep if time <= 20;
+. gen ln`outcome' = ln(`outcome');
+. keep if mask_norm_sick != .;
+. drop `outcome' maxpop population mask_norm_sick;
+. sort country time;
+. drop if ln`outcome' == .;
+. *Only keep countries with at least 8 days of data after baseline;
+. bys country: gen numdays = _N;
+. keep if numdays >= 8;
+. drop numdays;
+. *Use reshape by country;
+. replace country = subinstr(country," ","",.);
+. reshape wide lnconfirmedcases, i(time) j(country) string;
+. *w/ 5 million cutoff
+> *outsheet using "`datadir'\countrygraph.csv", comma replace;
+. outsheet using "`datadir'\countrygraphG.csv", comma replace;
+. foreach x of varlist * {;
+  2. display "`x'";
+  3. assert `x' >= `x'[_n-1] if `x'[_n-1] != .;
+  4. };
+. assert 1 == 0;
+. };
+
+. ********************************************************************************************************;
+. **SECTION 4: Run cross-country regression;
+. ********************************************************************************************************;
+. *Create average growth rate;
+. replace population = 0 if population == .;
+(4,630 real changes made)
+
+. sort `geog' time;
+
+. /*;
+> *For debugging;
+> collapse (sum) confirmedcases confirmeddeaths (sum) population (mean) mask_n, by(`geog' date);
+> sort country date;
+> list country date confirmedcases confirmeddeaths if country == "Australia";
+> list country date confirmedcases confirmeddeaths if country == "Austria";
+> assert 1 == 0;
+> */;
+. collapse (sum) `outcome' (sum)  population (mean) mask_n, by(`geog' time);
+
+. *For countries with only regional data, population is actually the sum of the population of infected regions;
+. bys `geog': egen maxpop = max(population);
+
+. tab country if maxpop == 0;
+
+                              country |      Freq.     Percent        Cum.
+--------------------------------------+-----------------------------------
+                            Hong Kong |         30      100.00      100.00
+--------------------------------------+-----------------------------------
+                                Total |         30      100.00
+
+. *Replace population for missing countries w/ > 5 million;
+. replace maxpop = 7392000 if country == "Hong Kong";
+(30 real changes made)
+
+. replace maxpop = 5603000 if country == "Denmark";
+(22 real changes made)
+
+. replace maxpop = 17180000 if country == "Netherlands";
+(26 real changes made)
+
+. replace maxpop = 66990000 if country == "France";
+(32 real changes made)
+
+. replace maxpop = 66440000 if country == "United Kingdom";
+(27 real changes made)
+
+. tab country if mask_n != .;
+
+                              country |      Freq.     Percent        Cum.
+--------------------------------------+-----------------------------------
+                            Argentina |         12        1.20        1.20
+                            Australia |         22        2.20        3.40
+                              Austria |         24        2.40        5.79
+                              Belgium |         26        2.60        8.39
+                               Brazil |         19        1.90       10.29
+                             Bulgaria |         12        1.20       11.49
+                               Canada |         23        2.30       13.79
+                                China |         70        6.99       20.78
+                             Colombia |         13        1.30       22.08
+                       Czech Republic |         18        1.80       23.88
+                              Denmark |         22        2.20       26.07
+                                Egypt |         18        1.80       27.87
+                              Finland |         21        2.10       29.97
+                               France |         32        3.20       33.17
+                              Germany |         31        3.10       36.26
+                               Greece |         21        2.10       38.36
+                            Hong Kong |         30        3.00       41.36
+                                India |         18        1.80       43.16
+                            Indonesia |         17        1.70       44.86
+                                 Iran |         35        3.50       48.35
+                              Ireland |         18        1.80       50.15
+                               Israel |         21        2.10       52.25
+                                Italy |         38        3.80       56.04
+                                Japan |         40        4.00       60.04
+                             Malaysia |         23        2.30       62.34
+                               Mexico |         13        1.30       63.64
+                          Netherlands |         26        2.60       66.23
+                             Pakistan |         16        1.60       67.83
+                              Romania |         18        1.80       69.63
+                               Russia |         15        1.50       71.13
+                         Saudi Arabia |         18        1.80       72.93
+                            Singapore |         32        3.20       76.12
+                         South Africa |         14        1.40       77.52
+                          South Korea |         41        4.10       81.62
+                                Spain |         30        3.00       84.62
+                               Sweden |         26        2.60       87.21
+                          Switzerland |         27        2.70       89.91
+                               Taiwan |         14        1.40       91.31
+                             Thailand |         17        1.70       93.01
+                               Turkey |         13        1.30       94.31
+                       United Kingdom |         27        2.70       97.00
+                        United States |         30        3.00      100.00
+--------------------------------------+-----------------------------------
+                                Total |      1,001      100.00
+
+. sort country time;
+
+. assert maxpop != .;
+
+. *Max population is total population of all infected regions;
+. keep if maxpop > 5e6;
+(0 observations deleted)
+
+. keep if time <= 30;
+(71 observations deleted)
+
+. *Compute ln`outcome' at max time and inittime;
+. gen ln`outcome' = ln(`outcome');
+
+. drop if time == .;
+(0 observations deleted)
+
+. drop if ln`outcome' == .;
+(0 observations deleted)
+
+. bys `geog': egen maxtime = max(time);
+
+. gen maxlntemp = ln`outcome' if time == maxtime;
+(888 missing values generated)
+
+. bys `geog': egen maxln = max(maxlntemp);
+
+. gen initln = ln`outcome' if time == 0;
+(888 missing values generated)
+
+. bys `geog': egen minln = max(initln);
+
+. gen growthrate = (maxln-minln)/maxtime;
+
+. keep if time == maxtime;
+(888 observations deleted)
+
+. sort `geog';
+
+. keep if maxtime >= 8;
+(0 observations deleted)
+
+. list `geog' maxtime growthrate, clean;
+
+              country   maxtime   growth~e  
+  1.        Argentina        11   .1916652  
+  2.        Australia        21   .1786681  
+  3.          Austria        23   .1984755  
+  4.          Belgium        25   .1905559  
+  5.           Brazil        18   .2018844  
+  6.         Bulgaria        11   .1040704  
+  7.           Canada        22   .1967243  
+  8.            China        30   .1711897  
+  9.         Colombia        12   .1820055  
+ 10.   Czech Republic        17   .1683737  
+ 11.          Denmark        21   .1167114  
+ 12.            Egypt        17   .1102304  
+ 13.          Finland        20   .1106789  
+ 14.           France        30   .2037444  
+ 15.          Germany        30   .2104739  
+ 16.           Greece        20   .0966904  
+ 17.        Hong Kong        29   .0062869  
+ 18.            India        17   .1539476  
+ 19.        Indonesia        16   .1605963  
+ 20.             Iran        30   .1816446  
+ 21.          Ireland        17   .1895278  
+ 22.           Israel        20   .1851865  
+ 23.            Italy        30   .2264711  
+ 24.            Japan        30   .0778765  
+ 25.         Malaysia        22    .143772  
+ 26.           Mexico        12   .1855759  
+ 27.      Netherlands        25    .183789  
+ 28.         Pakistan        15   .1771171  
+ 29.          Romania        17   .1708398  
+ 30.           Russia        14   .2157446  
+ 31.     Saudi Arabia        17   .1599784  
+ 32.        Singapore        30   .0717937  
+ 33.     South Africa        13   .1889607  
+ 34.      South Korea        30   .1479334  
+ 35.            Spain        29   .2542947  
+ 36.           Sweden        25   .1512865  
+ 37.      Switzerland        26   .1915869  
+ 38.           Taiwan        13   .0899524  
+ 39.         Thailand        16   .1670586  
+ 40.           Turkey        12   .3546036  
+ 41.   United Kingdom        26   .2077214  
+ 42.    United States        29   .2590702  
+
+. merge m:1 country using `initvars';
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                                42  (_merge==3)
+    -----------------------------------------
+
+. assert _merge != 1;
+
+. keep if _merge == 3;
+(0 observations deleted)
+
+. drop _merge;
+
+. merge m:1 country using `avgvars';
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                                42  (_merge==3)
+    -----------------------------------------
+
+. assert _merge != 1;
+
+. keep if _merge == 3;
+(0 observations deleted)
+
+. drop _merge;
+
+. assert avgcount == 8;
+
+. *Control mean;
+. sum growthrate if mask_n == 1;
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+  growthrate |          5    .0986478    .0646703   .0062869   .1711897
+
+. *Treatment mean;
+. sum growthrate if mask_n == 0;
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+  growthrate |         37    .1795005     .050487   .0717937   .3546036
+
+. *No controls;
+. regress growthrate mask_n, robust;
+
+Linear regression                               Number of obs     =         42
+                                                F(1, 40)          =       8.46
+                                                Prob > F          =     0.0059
+                                                R-squared         =     0.2097
+                                                Root MSE          =     .05208
+
+--------------------------------------------------------------------------------
+               |               Robust
+    growthrate |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+---------------+----------------------------------------------------------------
+mask_norm_sick |  -.0808527   .0278028    -2.91   0.006    -.1370443   -.0246611
+         _cons |   .1795005   .0083893    21.40   0.000     .1625452    .1964559
+--------------------------------------------------------------------------------
+
+. drop init_s5-init_s11;
+
+. drop blank_s5-blank_s11;
+
+. drop avg_var_s5-avg_var_s11;
+
+. drop avg_blank_s5-avg_blank_s11;
+
+. *Baseline policy controls and testing;
+. regress growthrate mask_n init_* blank_*, robust;
+
+Linear regression                               Number of obs     =         42
+                                                F(6, 32)          =          .
+                                                Prob > F          =          .
+                                                R-squared         =     0.3459
+                                                Root MSE          =     .05297
+
+----------------------------------------------------------------------------------------
+                       |               Robust
+            growthrate |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+-----------------------+----------------------------------------------------------------
+        mask_norm_sick |  -.0755479   .0296713    -2.55   0.016    -.1359864   -.0151094
+ init_s1_schoolclosing |  -.0030889   .0132356    -0.23   0.817    -.0300489     .023871
+     init_s2_workplace |  -.0071727   .0170811    -0.42   0.677    -.0419659    .0276204
+        init_s3_cancel |  -.0085093    .013314    -0.64   0.527    -.0356291    .0186105
+   init_s4_closepublic |   .0522611   .0465077     1.12   0.269    -.0424719    .1469941
+blank_s1_schoolclosing |   -.021117   .0145212    -1.45   0.156    -.0506958    .0084618
+    blank_s2_workplace |  -.1125583   .0556126    -2.02   0.051    -.2258375     .000721
+       blank_s3_cancel |  -.0502552   .0144612    -3.48   0.001    -.0797117   -.0207988
+  blank_s4_closepublic |   .1543622   .0556126     2.78   0.009      .041083    .2676414
+                 _cons |   .1940272   .0144612    13.42   0.000     .1645708    .2234837
+----------------------------------------------------------------------------------------
+
+. *Average policy controls and testing;
+. regress growthrate mask_n avg_var* avg_blank_*, robust;
+note: avg_blank_s3_cancel omitted because of collinearity
+note: avg_blank_s4_closepublic omitted because of collinearity
+
+Linear regression                               Number of obs     =         42
+                                                F(6, 34)          =          .
+                                                Prob > F          =          .
+                                                R-squared         =     0.4216
+                                                Root MSE          =     .04833
+
+--------------------------------------------------------------------------------------------
+                           |               Robust
+                growthrate |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+---------------------------+----------------------------------------------------------------
+            mask_norm_sick |  -.1005972    .029539    -3.41   0.002    -.1606277   -.0405667
+  avg_var_s1_schoolclosing |   .0220474   .0123394     1.79   0.083    -.0030293     .047124
+      avg_var_s2_workplace |   -.026084   .0182248    -1.43   0.161    -.0631213    .0109532
+         avg_var_s3_cancel |  -.0301361    .012832    -2.35   0.025    -.0562139   -.0040584
+    avg_var_s4_closepublic |   .0592828   .0288181     2.06   0.047     .0007174    .1178482
+avg_blank_s1_schoolclosing |  -.0169421   .0141095    -1.20   0.238    -.0456161    .0117318
+    avg_blank_s2_workplace |  -.0144871   .0153746    -0.94   0.353     -.045732    .0167578
+       avg_blank_s3_cancel |          0  (omitted)
+  avg_blank_s4_closepublic |          0  (omitted)
+                     _cons |    .200063   .0153746    13.01   0.000     .1688182    .2313079
+--------------------------------------------------------------------------------------------
+
+. 
+end of do-file
+
+. do "D:\Dropbox (yale som economics)\COVID-19 Masks\Dofiles\makedatafinal.do"
+
+. #delimit ;
+delimiter now ;
+. clear;
+
+. set more off;
+
+. local drop = "D:\Dropbox (yale som economics)";
+
+. local datadir = "`drop'\COVID-19 Masks\Data";
+
+. local logdir = "`drop'\COVID-19 Masks\Logfiles";
+
+. local c_date= subinstr("$S_DATE", " ", "", .);
+
+. local makegraph = 0;
+
+. *local outcome = "confirmedcases";
+. local outcome = "confirmeddeaths";
+
+. capture log close;

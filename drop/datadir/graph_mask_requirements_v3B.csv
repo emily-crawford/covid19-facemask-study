@@ -1,0 +1,56 @@
+country,mask_norm_sick,mask_required_sick,mask_required_all
+Australia,0,3/6/2020,0
+Algeria,,,
+Argentina,0,0,0
+Austria,0,3/17/2020,4/1/2020
+Belgium,0,0,0
+Brazil,0,0,0
+Bulgaria,0,3/13/2020,3/30/2020
+Canada,0,0,0
+Chile,,,
+China,1,0,1/22/2020
+Colombia,0,0,0
+Czechia,0,,3/18/2020
+Denmark,0,0,0
+Dominican Republic,,,
+Ecuador,,,
+Egypt,0,0,0
+Finland,0,0,0
+France,0,0,0
+Germany,0,0,0
+Greece,0,0,0
+Hong Kong,1,0,0
+India,0,0,0
+Indonesia,0,0,0
+Iran,0,,0
+Iraq,,,
+Ireland,0,0,0
+Israel,0,0,0
+Italy,0,3/8/2020,0
+Japan,1,0,0
+Lebanon,,,
+Malaysia,0,0,0
+Mexico,0,0,0
+Netherlands,0,0,0
+Norway,,,
+Pakistan,0,0,0
+Peru,,,
+Philippines,,,
+Poland,,,
+Portugal,,,
+Romania,0,3/11/2020,0
+Russia,0,0,0
+Saudi Arabia,0,0,0
+Serbia,,,
+Singapore,0,3/29/2020,0
+South Africa,0,0,0
+South Korea,1,1/26/2020,1/26/2020
+Spain,0,0,0
+Sweden,0,0,0
+Switzerland,0,3/3/2020,0
+Taiwan,1,0,0
+Thailand,0,,3/25/2020
+Turkey,0,0,0
+United Arab Emirates,,,
+United Kingdom,0,0,0
+United States of America,0,0,0
